@@ -1,0 +1,218 @@
+---
+title: "COVID_ADA Code"
+author: "Amber Clover"
+date: "4/13/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r GLM, include=FALSE}
+
+glm.RR <- function(GLM.RESULT, digits = 2) {
+
+    if (GLM.RESULT$family$family == "binomial") {
+        LABEL <- "OR"
+    } else if (GLM.RESULT$family$family == "poisson") {
+        LABEL <- "RR"
+    } else {
+        stop("Not logistic or Poisson model")
+    }
+
+    COEF      <- stats::coef(GLM.RESULT)
+    CONFINT   <- stats::confint(GLM.RESULT)
+    TABLE     <- cbind(coef=COEF, CONFINT)
+    TABLE.EXP <- round(exp(TABLE), digits)
+
+    colnames(TABLE.EXP)[1] <- LABEL
+
+    TABLE.EXP
+}
+```
+
+
+```{r Data Import, include=FALSE}
+
+#Data import
+covid <- read.csv("/Users/amberclover/Desktop/State Level Data/stateleveldata.csv")
+View(covid)
+
+#relevel Region to make the South the reference group
+covid <- within(covid, Region <-relevel(Region, ref = "South"))
+
+# Distribution Shape - Cases
+d <- density(covid$cases)
+plot(d, xlim=c(1,200000))
+hist(covid$case,breaks=c(0,2500,5000,7500,10000,12500,15000,17500,20000,22500, 25000, 27500, 30000, 35000, 40000, 45000, 50000, 200000))
+
+# Distribution Shape - Deaths
+d <- density(covid$deaths)
+plot(d, xlim=c(1,20000))
+hist(covid$deaths,breaks=c(0,1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000))
+
+# Packages
+library(MASS)
+library(lmtest)
+library(sandwich)
+
+```
+
+```{r Model without Offset, echo=FALSE, warning=FALSE, message=FALSE}
+# base model of all states - cases by pop. density
+model.0 <- glm(cases ~ Region, family ="poisson", data = covid)
+
+summary(model.0)
+
+# base model of all states - death by pop. density
+model.2 <- glm(deaths ~ Region, family ="poisson", data = covid)
+
+summary(model.2)
+```
+
+```{r Poisson Model for Cases, echo=FALSE, warning=FALSE, message=FALSE}
+
+############### model including covariates with South as the reference group ###############
+
+model.1 <- glm(cases ~ Region + Pop.Density.Cat + offset(log(population.Time.as.Risk)), family ="poisson", data = covid)
+
+summary(model.1)
+
+# IRRs
+glm.RR(model.1, 2)
+
+```
+
+
+
+
+
+```{r Poisson Model for Deaths, echo=FALSE, warning=FALSE, message=FALSE}
+
+############### model including covariates with South as the reference group ###############
+
+model.11 <- glm(deaths ~ Region + Pop.Density.Cat + offset(log(population.Time.as.Risk)), family ="poisson", data = covid)
+
+summary(model.11)
+
+# IRRs
+glm.RR(model.11, 2)
+
+```
+
+
+```{r Standard Errors for Case Model, echo=FALSE, warning=FALSE, message=FALSE}
+
+######### Poisson model cases with SE estimated via robust variance estimator #########
+coeftest(model.1, vcov = sandwich)
+
+cov.model <- vcovHC(model.1, type="HC0") 
+std.err <- sqrt(diag(cov.model)) #robust std erros for coefficients
+
+#summary table of estumates
+r.est <- cbind(Estimate= coef(model.1), "Robust SE" = std.err,
+"Pr(>|z|)" = 2 * pnorm(abs(coef(model.1)/std.err), lower.tail=FALSE),
+LL = coef(model.1) - 1.96 * std.err,
+UL = coef(model.1) + 1.96 * std.err) 
+
+r.est
+
+r.est1 <- cbind(Estimate= exp(coef(model.1)), LL = exp(coef(model.1) - 1.96 * std.err),
+UL = exp(coef(model.1) + 1.96 * std.err)) 
+r.est1
+
+```
+
+
+
+```{r Standard Errors Death Model, echo=FALSE, warning=FALSE, message=FALSE}
+
+######### Poisson model deaths with SE estimated via robust variance estimator #########
+coeftest(model.11, vcov = sandwich)
+
+cov.model.11 <- vcovHC(model.11, type="HC0") #type specifies variance estimator method, the vcovHC function gives the covariance matrix of the coefficient estimates. Need this to estimate robust SE
+std.err1 <- sqrt(diag(cov.model.11)) #estimate robust standard error for each coefficient
+
+#make a summary table of coefficients, robust SEs, and LL and UL confidence intervals (log scale)
+r.est2 <- cbind(Estimate= coef(model.11), "Robust SE" = std.err1,
+"Pr(>|z|)" = 2 * pnorm(abs(coef(model.11)/std.err1), lower.tail=FALSE),
+LL1 = coef(model.11) - 1.96 * std.err1,
+UL1 = coef(model.11) + 1.96 * std.err1) 
+
+r.est2
+
+r.est3<-cbind(Estimate= exp(coef(model.11)), LL = exp(coef(model.11) - 1.96 * std.err1),
+UL = exp(coef(model.11) + 1.96 * std.err1)) 
+r.est3
+```
+
+
+```{r Neg Bin Models, echo=FALSE, warning=FALSE, message=FALSE}
+#neg bin model cases to check for overdispersion
+model.1nb <- glm.nb(cases ~ Region + Pop.Density.Cat + offset(log(population.Time.as.Risk)), data = covid)
+summary(model.1nb)
+
+#neg bin model deaths to check for overdispersion
+model.11nb <- glm.nb(deaths ~ Region + Pop.Density.Cat + offset(log(population.Time.as.Risk)), data = covid)
+summary(model.11nb)
+```
+
+
+```{r compare models, echo=FALSE, warning=FALSE, message=FALSE}
+#compare case models
+library(lmtest)
+lrtest(model.1, model.1nb)
+
+#compare death models
+lrtest(model.11, model.11nb)
+```
+
+*Note: The negative binomial models for cases (`X^2`=229759, p<.05) significantly improved the fit of both models and should be used. The negative binomial models for deaths (`X^2`=14355, p<.05) significantly improved the fit of both models and should be used.*
+
+
+```{r stargazer, echo=FALSE, warning=FALSE, message=FALSE}
+#Cases - Poisson v. Neg Bin
+library(stargazer)
+stargazer(model.1, model.1nb, title="Case Model Comparison",
+          type="text",align=TRUE,single.row=TRUE, digits=6)
+
+#Deaths - Poisson v. Neg Bin
+stargazer(model.11, model.11nb, title="Death Model Comparison",
+          type="text",align=TRUE,single.row=TRUE, digits=6)
+```
+
+*Interpretation: SE from negative binomial models were much larger than those of the Poisson for both the case and death models, suggesting the presence of overdispersion.*
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+## Negative Binomial model with SE estimated via robust variance estimator for cases
+robust1 <- coeftest(model.1nb, vcov = sandwich)
+
+#print results
+robust1
+
+## Negative Binomial model with SE estimated via robust variance estimator for deaths
+robust11 <- coeftest(model.11nb, vcov = sandwich)
+
+#print results
+robust11
+
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+#Neg Bin IRRs for Cases
+est.cases <- cbind(IRR = coef(model.1nb), "2.5%"=robust1[,1]-1.96*robust1[,2], 
+             "97.5%"=robust1[,1]+1.96*robust1[,2])
+exp(est.cases)
+
+#Neg Bin IRRs for Deaths
+est.deaths <- cbind(IRR = coef(model.11nb), "2.5%"=robust11[,1]-1.96*robust11[,2], 
+             "97.5%"=robust11[,1]+1.96*robust11[,2])
+exp(est.deaths)
+
+```
+
+
+
+
