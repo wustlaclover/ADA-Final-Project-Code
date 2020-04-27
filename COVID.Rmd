@@ -36,11 +36,11 @@ glm.RR <- function(GLM.RESULT, digits = 2) {
 ```{r Data Import, include=FALSE}
 
 #Data import
-covid <- read.csv("/Users/amberclover/Desktop/State Level Data/stateleveldata.csv")
+covid <- read.csv("/Users/amberclover/Desktop/stateleveldata.csv")
 View(covid)
 
 #relevel Region to make the South the reference group
-covid <- within(covid, Region <-relevel(Region, ref = "South"))
+covid <- within(covid, Region <-relevel(Region, ref = "West"))
 
 # Distribution Shape - Cases
 d <- density(covid$cases)
@@ -105,6 +105,8 @@ glm.RR(model.11, 2)
 ```{r Standard Errors for Case Model, echo=FALSE, warning=FALSE, message=FALSE}
 
 ######### Poisson model cases with SE estimated via robust variance estimator #########
+library(sandwich)
+library(lmtest)
 coeftest(model.1, vcov = sandwich)
 
 cov.model <- vcovHC(model.1, type="HC0") 
