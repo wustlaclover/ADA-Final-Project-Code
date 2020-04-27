@@ -40,17 +40,22 @@ covid <- read.csv("/Users/amberclover/Desktop/stateleveldata.csv")
 View(covid)
 
 #relevel Region to make the South the reference group
-covid <- within(covid, Region <-relevel(Region, ref = "West"))
+covid <- within(covid, Region <-relevel(Region, ref = "South"))
 
 # Distribution Shape - Cases
 d <- density(covid$cases)
 plot(d, xlim=c(1,200000))
-hist(covid$case,breaks=c(0,2500,5000,7500,10000,12500,15000,17500,20000,22500, 25000, 27500, 30000, 35000, 40000, 45000, 50000, 200000))
+hist(covid$case,
+     main= "Figure 2. Histogram of COVID-19 Cases",
+     breaks=c(0,2500,5000,7500,10000,12500,15000,17500,20000,22500, 25000, 27500, 30000, 35000, 40000, 45000, 50000, 200000))
 
 # Distribution Shape - Deaths
 d <- density(covid$deaths)
 plot(d, xlim=c(1,20000))
-hist(covid$deaths,breaks=c(0,1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000))
+hist(covid$deaths,
+     main= "Figure 3. Histogram of COVID-19 Deaths",
+     breaks=c(0,1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000))
+
 
 # Packages
 library(MASS)
